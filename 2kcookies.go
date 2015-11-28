@@ -9,6 +9,7 @@ Author is not responsible for your use of this software, and reminds you to be n
 package main
 
 import (
+	"flag"
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -53,11 +54,17 @@ func GetCookie(j *CookieManager) (*http.Response, error) {
 	client := &http.Client{}
 	client.Jar = j
 	req, err := http.NewRequest("GET", "http://2k.com", nil)
+	if err != nil {
+		fmt.Println("We have an error in request")
+		return nil, err
+	}
+
 	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Println("We have an error in request")
 		return nil, err
 	}
+
 	return resp, nil
 }
 
@@ -164,9 +171,14 @@ func ScrapePage(page *io.ReadCloser) map[string]string {
 func main() {
 	svc := dynamodb.New(session.New(&aws.Config{Region: aws.String("us-east-1")}))
 	jar := &CookieManager{}
-	for {
+	var cookieCount int
+	var sleepTime int64
+	flag.IntVar(&cookieCount, "count", 10, "collect this many cookies")
+	flag.Int64Var(&sleepTime, "sleep", 2, "sleep this many between executions")
+	flag.Parse()
+	for i := 0; i <= cookieCount; i++ {
 		jar.jar = make(map[string][]*http.Cookie)
-		if resp, err := GetCookie(jar); err != nil {
+		if resp, err := GetCookie(jar); err == nil {
 			t, _ := time.Parse(timeLongForm, resp.Header["Date"][0])
 			time_string := strconv.FormatInt(t.Unix(), 10)
 			body := resp.Body
@@ -175,6 +187,9 @@ func main() {
 		} else {
 			fmt.Println("Failed to get a response body.  Will retry after timeout.")
 		}
-		time.Sleep(2 * time.Second) // lets hold firm 2s for niceness
+		if i%5 == 0 && i != 0 {
+			fmt.Printf("Got %d cookies.\n", i)
+		}
+		time.Sleep(time.Duration(sleepTime) * time.Second) // lets hold firm 2s for niceness
 	}
 }
